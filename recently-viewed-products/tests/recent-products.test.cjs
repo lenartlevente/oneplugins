@@ -202,7 +202,7 @@ test('Late container and replacement container remount the cards without new req
     f.mountTarget();
     await until(() => f.cards().length === 1);
     assert.equal(f.calls.length, count);
-    assert.equal(f.w.document.querySelectorAll('#one-recent-products-style').length, 1);
+    assert.equal(f.w.document.querySelectorAll('#one-recent-products-style').length, 0);
   } finally { f.close(); }
 });
 test('Slower current-product response from an abandoned route cannot update history', async () => {
@@ -411,7 +411,7 @@ test('Prices and stock use the current ONe clients, POST bodies, canonical IDs a
     assert.deepEqual(stock.payload, { skus: ['111139'], warehouses: ['CENTRAL','LOCAL'], cartId: 'cart-1' });
     assert.deepEqual(stock.options, { authentication: 'public' });
     assert.ok(f.w.document.querySelector('.one-rv__price').textContent.includes('100'));
-    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /Ft.*nettó/);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /Ft.*nettó/i);
     assert.equal(f.w.document.querySelectorAll('.one-rv__stock-row').length, 2);
     assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
     assert.deepEqual(f.history(), ['111139']);
@@ -471,7 +471,7 @@ test('Gross/net and currency switches refresh the displayed customer prices', as
     await until(f.ready);
     f.mutate(state => { state.layout.priceGross = true; });
     await until(f.ready);
-    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /127.*bruttó/);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /127.*bruttó/i);
     f.mutate(state => { state.layout.currency.code = 'EUR'; });
     await until(f.ready);
     assert.match(f.w.document.querySelector('.one-rv__price').textContent, /EUR|€/);
@@ -780,5 +780,91 @@ test('An opened or rejected native plugin flow is not reported as a successful c
     await until(() => f.w.document.querySelector('.one-rv__feedback').textContent === 'Kövesd a webshop kosárüzenetét.');
     assert.equal(events, 0);
     assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
+  } finally { f.close(); }
+});
+
+test('Warehouse IDs and stock states reuse native dot classes, including unknown data', async () => {
+  const ids = ['FETFLK', 'FETM3', 'FETSZOL', 'WH / 1'];
+  const f = fixture({ path: '/', delayedApp: true, stock: () => ({ data: {
+    '1': { stockVisibilityMode: 'VISIBLE', available: true, overallQuantity: 6,
+      warehouses: ids.map((warehouseId, i) => ({ warehouseId, warehouseLabel: warehouseId,
+        quantity: i === 0 ? 6 : i === 2 ? null : 0 })) },
+    '2': { stockVisibilityMode: 'VISIBLE', available: false, overallQuantity: 0,
+      warehouses: ids.map(warehouseId => ({ warehouseId, warehouseLabel: warehouseId, quantity: 0 })) }
+  } }) });
+  try {
+    f.seed(['1', '2']);
+    f.state.stocks.warehouses = { allIds: ids, byId: {} };
+    f.state.stocks.defaultWarehouse = 'FETFLK';
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    const panels = [...f.w.document.querySelectorAll('.one-rv__card')];
+    const rows = [...panels[0].querySelectorAll('.one-rv__stock-row')];
+    assert.deepEqual(rows.map(row => row.dataset.warehouseId), ids);
+    assert.deepEqual(rows.map(row => row.dataset.stockState), ['available', 'other-stock', 'unknown', 'other-stock']);
+    assert.ok(rows[0].classList.contains('one-rv__warehouse-FETFLK'));
+    assert.ok(rows[1].classList.contains('one-rv__warehouse-FETM3'));
+    assert.ok(rows[3].classList.contains('one-rv__warehouse-WH_20__2f__20_1'));
+    for (const row of rows) {
+      const state = row.dataset.stockState;
+      assert.ok(row.classList.contains('fetis-stockbox__warehouse-row'));
+      assert.ok(row.classList.contains('fetis-stockbox__warehouse-row--' + state));
+      assert.ok(row.classList.contains('one-rv__stock-row--' + state));
+      assert.equal(row.querySelector('.fetis-stockbox__status-dot').getAttribute('aria-hidden'), 'true');
+      assert.ok(row.getAttribute('aria-label'));
+    }
+    assert.ok([...panels[1].querySelectorAll('.one-rv__stock-row')].every(row =>
+      row.classList.contains('fetis-stockbox__warehouse-row--unavailable')));
+    assert.equal(rows[2].querySelector('.one-rv__stock-value').textContent, 'Nem elérhető');
+  } finally { f.close(); }
+});
+
+test('Incomplete stock without an overall total cannot claim an unavailable warehouse', async () => {
+  const f = fixture({ stock: () => ({ data: { '111139': { stockVisibilityMode: 'VISIBLE', available: false,
+    warehouses: [{ warehouseId: 'CENTRAL', quantity: 0 }, { warehouseId: 'LOCAL', quantity: null }] } } }) });
+  try {
+    await until(f.ready);
+    assert.ok([...f.w.document.querySelectorAll('.one-rv__stock-row')].every(row => row.dataset.stockState === 'unknown'));
+    assert.equal(f.w.document.querySelectorAll('.fetis-stockbox__warehouse-row--unavailable').length, 0);
+  } finally { f.close(); }
+});
+
+test('Native price classes show the buyer amount, catalog price, discount and separate unit line', async () => {
+  const f = fixture({ price: () => ({ data: [{ productId: '111139', quantity: 1,
+    priceNet: 5582.10, priceGross: 7089.27, catalogPriceNet: 6500.70, catalogPriceGross: 8255.89 }] }) });
+  try {
+    await until(f.ready);
+    const price = f.w.document.querySelector('.one-rv__price');
+    assert.ok(price.classList.contains('price_column'));
+    assert.match(price.querySelector('.transactional_price').textContent, /5\s?582,10.*Ft/);
+    assert.match(price.querySelector('del.crossed').textContent, /6\s?500,70.*Ft/);
+    assert.equal(price.querySelector('.discount').textContent, '-14 %');
+    assert.equal(price.querySelector('.gr_net_unit').textContent, '(Nettó/db)');
+    f.mutate(state => { state.layout.priceGross = true; });
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.gr_net_unit').textContent, '(Bruttó/db)');
+  } finally { f.close(); }
+});
+
+test('No discount badge or crossed price is fabricated when catalog pricing is absent or lower', async () => {
+  const f = fixture({ price: () => ({ data: [{ productId: '111139', quantity: 1,
+    priceNet: 100, priceGross: 127, catalogPriceNet: 99, catalogPriceGross: null }] }) });
+  try {
+    await until(f.ready);
+    assert.equal(f.w.document.querySelectorAll('.one-rv__catalog-price, .one-rv__discount').length, 0);
+    assert.match(f.w.document.querySelector('.one-rv__price-value').textContent, /100.*Ft/);
+  } finally { f.close(); }
+});
+
+test('The module leaves styling to central CSS and removes its legacy injected stylesheet on upgrade', async () => {
+  const f = fixture();
+  try {
+    await until(f.ready);
+    assert.equal(f.w.document.querySelectorAll('style, link[rel="stylesheet"]').length, 0);
+    f.w.OneRecentlyViewed.destroy();
+    const style = f.w.document.createElement('style');
+    style.id = 'one-recent-products-style'; style.textContent = '.one-rv { color: red; }';
+    f.w.document.head.appendChild(style);
+    f.w.eval(source); await until(f.ready);
+    assert.equal(f.w.document.querySelectorAll('style, link[rel="stylesheet"]').length, 0);
   } finally { f.close(); }
 });

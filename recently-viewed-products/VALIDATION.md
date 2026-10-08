@@ -1,6 +1,6 @@
-# Ellenőrzési eredmény – 2026. október 8., 1.1.0
+# Ellenőrzési eredmény – 2026. október 8., 1.2.0
 
-Státusz: 44/44 sikeres automatizált teszt, JavaScript szintaktikai ellenőrzés és két sikeres, csak olvasási célú vendég POST-próba. Hitelesített vevővel tényleges kosárírás nem történt.
+Státusz: 49/49 sikeres automatizált teszt, JavaScript szintaktikai ellenőrzés, natív CSS-sel végzett böngészős megjelenítési próba és az 1.1.0 fejlesztése során két sikeres, csak olvasási célú vendég POST-próba. Hitelesített vevővel tényleges kosárírás nem történt.
 
 ## Igazolt szerződések
 
@@ -39,6 +39,22 @@ Node.js, jsdom 26.1.0, `node --test tests/recent-products.test.cjs`.
 | Kosár | Rendelési egységben küldött minimum mennyiség, natív handler előnyben, rendelési plugin megőrzése, tájékoztató termékadat elkülönítése, pluginregiszter változása, regisztrált store action és kosárfrissítés |
 | Írási védelem | Dupla kattintás, olvasási timeouttól független írási zárolás, újrapróbálkozás kizárása, régi vevőnek indított művelet visszajelzésének eldobása |
 | Navigáció és hibák | Kép/név kattintható marad, gomb nem link; nevek szövegként, hibák token/HTTP-fejléc nélkül |
+| Készletosztályok | Raktárazonosító, available/other-stock/unavailable/unknown, natív pöttyosztályok, hiányos összkészlet, összetett azonosító kódolása |
+| Ármegjelenítés és CSS | Natív árosztályok, két tizedes, külön egységsor, megfelelő mennyiségű listaár és számított kedvezmény, CSS-injektálás kizárása és régi stíluselem eltávolítása |
+
+## Böngészős stíluspróba
+
+Chromium 151, tesztadatokból a tényleges modul által generált HTML, a besttool.hu 2026. október 8-i publikus központi CSS-ével. Külső böngészős hálózati kérések blokkolva; nem történt bejelentkezés vagy kosárírás.
+
+| Ellenőrzés | Eredmény |
+| --- | --- |
+| Csak a natív CSS | Az ár színe és a három üzleti készletállapot pöttyének színe/kitöltése helyes; a saját kártyarácsot és árnyékot ez nem biztosítja |
+| Natív CSS + one-recent-products.css | 1440 px-en 6 oszlop, 960 px-en 3, 390 px-es mobilnézetben 2; vízszintes túlcsordulás nélkül |
+| Kártya | 24 px-es desktop és 18 px-es mobil lekerekítés; halvány alapárnyék és erősebb hover-árnyék |
+| Árblokk | Átlátszó háttér, vevői ár és külön egységsor; megfelelő listaár esetén áthúzás és kedvezmény |
+| Készlet | Natív zöld kitöltött, piros üres és piros kitöltött pötty; ismeretlen adat semleges pötty |
+
+A desktop és mobil képernyőképeket vizuálisan is ellenőriztem. A mobil sorokban a mennyiség a raktárnév alatt szerepel, hogy a hosszú raktárnevek több helyet kapjanak. Ez helyi stíluspróba; a preprod tenant saját CSS-ébe való beillesztés még nem történt meg.
 
 ## Még szükséges élő integrációs próba
 

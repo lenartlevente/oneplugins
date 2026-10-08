@@ -1,0 +1,11 @@
+{
+  "version": "1.0.0",
+  "source": "one-recent-products.v1.js",
+  "file": "one-recent-products.1.0.0.46957dcb8a91.js",
+  "bytes": 17160,
+  "sha256": "46957dcb8a9160be091ac8f00248995d66a528fb90c8fca81e72990fbb23ce0e",
+  "integrity": "sha384-xH27UBz6JnWf0LR7nKxAYcoHaeQ5ZI4RPGl0v3waB7fps1kmxNQve6xAPvNYbxW2",
+  "contentType": "text/javascript; charset=utf-8",
+  "cacheControl": "public, max-age=31536000, immutable",
+  "deploymentStatus": "not-deployed"
+}

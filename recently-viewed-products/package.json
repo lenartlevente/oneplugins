@@ -1,0 +1,7 @@
+{
+  "name": "one-recent-products",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "test": "node --test tests/recent-products.test.cjs" },
+  "devDependencies": { "jsdom": "26.1.0" }
+}

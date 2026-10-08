@@ -1,11 +1,11 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "source": "one-recent-products.v1.js",
-  "file": "one-recent-products.1.0.0.46957dcb8a91.js",
-  "bytes": 17160,
-  "sha256": "46957dcb8a9160be091ac8f00248995d66a528fb90c8fca81e72990fbb23ce0e",
-  "integrity": "sha384-xH27UBz6JnWf0LR7nKxAYcoHaeQ5ZI4RPGl0v3waB7fps1kmxNQve6xAPvNYbxW2",
+  "file": "one-recent-products.1.1.0.72dbc7faad84.js",
+  "bytes": 35761,
+  "sha256": "72dbc7faad8409aa9100ef997ef734852ad095bed71717e02f9d57c20f1aa8da",
+  "integrity": "sha384-Y90m5AIJDFRC9T4cgxajQ9CONyXuOQkzLmQQZ7MGr6CouUfTvYj1U27mQNxUWFah",
   "contentType": "text/javascript; charset=utf-8",
-  "cacheControl": "public, max-age=31536000, immutable",
-  "deploymentStatus": "not-deployed"
+  "previousFile": "one-recent-products.1.0.0.46957dcb8a91.js",
+  "integrationStatus": "authenticated-preprod-verification-required"
 }

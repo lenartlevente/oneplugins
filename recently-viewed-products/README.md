@@ -1,10 +1,10 @@
 # ONe – utolsó 6 megtekintett termék
 
-Előkészített kliensmodul a besttool.hu ONe Front Office felületéhez.
+1.1.0 kliensmodul a besttool.hu ONe Front Office felületéhez, vevői árral, készlettel és kosárgombbal.
 Az ellenőrzött oldal az ONe 9.137.2 kliensét használta 2026. október 7-én.
-Ez ellenőrzésre szánt első verzió; nem történt GTM-publikálás vagy CDN-telepítés.
+Integrációs ellenőrzésre előkészített kiadás; GTM-publikálás és hitelesített vevői kosárpróba nem történt.
 
-A forrás helye: [lenartlevente/CODE – ONe/recently-viewed-products](https://github.com/lenartlevente/CODE/tree/main/ONe/recently-viewed-products).
+A forrás helye: [lenartlevente/oneplugins – recently-viewed-products](https://github.com/lenartlevente/oneplugins/tree/main/recently-viewed-products).
 A végleges tárolási és CDN-architektúrajavaslat: [STORAGE-CDN.md](STORAGE-CDN.md).
 A `release/` mappában a változatlan futó kód verziózott kiadási fájlja és az ellenőrzőösszegeket tartalmazó manifest található.
 
@@ -14,8 +14,16 @@ A `release/` mappában a változatlan futó kód verziózott kiadási fájlja é
 - Legfeljebb 6 egyedi, valódi termékazonosító; legfrissebb elöl. Az aktuális termék is szerepel.
 - Nincs localStorage, sessionStorage, IndexedDB vagy saját szerveroldali előzménytárolás.
 - A termékadatokat az ONe aktuális Front Office API-kliense kéri le.
-- A kártyák tartalma: kép, terméknév, cikkszám, termékoldal-link.
-- A kártyákon az első verzió nem jelenít meg árat, készletet vagy kosárgombot.
+- A kártyák tartalma: kép, terméknév, cikkszám, vevői ár, raktárkészlet és Kosárba gomb.
+- A kép és a név a termékoldalra vezet; a kosárgomb külön elem, nem navigál.
+- Az ár a natív ONe kliens aktuális vevői tokenjével készül. Vendégként az auth-optional végpont által visszaadott ár jelenik meg.
+- Az ár a minimum rendelési mennyiség teljes ára, a mennyiséggel, pénznemmel és nettó/bruttó jelöléssel. A webshop árnézetének változását követi.
+- A készlet a webshopban ismert raktárakra készül, tartalmi egységben. HIDDEN módnál csak elérhetőséget jelenít meg, mennyiséget nem.
+- Hiányzó vagy hibás ár nem lesz nullaár; ilyen terméket a modul nem helyez kosárba. Az API kifejezett nullaárát elfogadja.
+- A termék minimum rendelési mennyiségét teszi kosárba, rendelési egységben. A csomagolási szorzó az árlekérés mennyiségénél érvényesül.
+- A natív kosárfolyamatot használja, amennyiben a megfelelő ONe Vue-komponens elérhető. Ennek hiányában rendelési plugin nélküli terméknél a regisztrált cart/addProductToCart store actiont használja; az action a kosarat is újratölti.
+- Az ONe pluginregiszterében app_add_to_cart típusú komponenshez kötött terméknél a natív handler vagy egy explicit adapter szükséges. A termék más kiegészítő adata, például productHelper, nem tiltja le a kosárgombot. Ismeretlen pluginregiszterrel a modul nem kerüli meg a lehetséges egyedi rendelési folyamatot.
+- Folyamatban lévő kosárművelet alatt a gombokat letiltja; írási műveletet nem próbál automatikusan újra.
 - ONe routerrel működő normál kattintás; új lap és módosító billentyűk esetén hagyományos link.
 - Megszűnt, nem visszaadott vagy nem aktív termék nem jelenik meg; nincs mesterséges feltöltés 6 kártyára.
 - Újranézéskor nincs duplikáció. Query és hash változása önmagában nem új termékmegtekintés.
@@ -23,10 +31,10 @@ A `release/` mappában a változatlan futó kód verziózott kiadási fájlja é
 
 ## Telepítés
 
-1. A release/manifest.json által megnevezett JavaScript-fájlt helyezd HTTPS-en elérhető saját CDN-re, az one/recently-viewed/ útvonal alá. A forrásfájl neve one-recent-products.v1.js; a GTM a konkrét, ellenőrzőösszeggel megnevezett kiadási fájlt tölti be.
+1. A release/manifest.json által megnevezett JavaScript a külön GitHub-repóból, jsDelivr-en keresztül tölthető be. A forrásfájl neve one-recent-products.v1.js; a GTM számára konkrét commitból betöltött kiadási fájl ajánlott.
 2. A cms-target.html tartalmát helyezd el a termékoldal kívánt CMS HTML-blokkjában.
 3. Ha meglévő üres UUID-s divet használsz, annak ID-jét add meg a GTM betöltő data-target-id attribútumában. A cél-div kizárólag e modulhoz tartozzon. Más célra használt rejtett ONe-elemet ne adj meg.
-4. A gtm-loader.html egy sorát tedd Custom HTML tagbe, a SAJAT-CDN helyére a valós CDN-hostot írva.
+4. A gtm-loader.html script sorát tedd a GTM Custom HTML tagjébe. A CDN-host és a cél-div ID előre ki van töltve.
 5. Indítás: első betöltéskor, például DOM Ready. A tag firing option legyen Once per page. A modul kezeli a további navigációt; History Change miatti ismételt CDN-betöltés nem szükséges.
 6. A GTM indítását igazítsd a webshop meglévő CookieYes/consent beállításához. A modul canUseCookie konfigurációs függvénye további, futás közben is ellenőrzött engedélyezési pont. Alapértelmezése true; önmagában nem olvassa a CookieYes választását.
 7. Ha a konténer őse rejtett, azt a CMS-ben külön láthatóvá kell tenni. A modul csak a saját cél-divjét mutatja meg.
@@ -44,6 +52,25 @@ window.$nuxt.$api.catalog.app.getProductsListById(true, productIds);
 
 Az ONe API-plugin getToken callbackje a store.state.auth.accessToken aktuális értékét adja át a saját API-rétegének; a frissítést is az ONe kezeli. A modul a meglévő klienst használja, nem állít elő vagy tárol második hitelesítési tokent. Az auth és vevői kontextus változásakor eldobja a régi válaszokat, és újrakéri az adatokat.
 
+Ár és készlet:
+
+~~~js
+window.$nuxt.$api.pricing.app.fetchPricingForProducts({
+  products: [{ productId: productId, quantity: quantityInContentUnits }]
+});
+window.$nuxt.$api.stock.app.post('/products/stocks', {
+  skus: productIds,
+  warehouses: warehouseIds,
+  cartId: currentCartId
+}, { authentication: 'public' });
+~~~
+
+A pricing metódus a POST /api/v1/pricing/app/auth-optional/get-price végpontot használja. A stock általános POST-hívás a POST /api/v1/stock/app/public/products/stocks végpontot használja. A 9.137.2 natív getStocksForProductsAndWarehouses metódusa GET-et küld, ezért itt nem azt hívja a modul.
+
+A környezethez tartozó API-base URL és one-tenant fejléc az ONe kliens konfigurációjából jön. A JavaScriptben nincs prod/preprod hostlista vagy saját tokenes fetch; ugyanaz a betöltő mindkét környezetben működik.
+
+Az aktuális raktár, raktárlista, kosár, pénznem, nettó/bruttó nézet és vásárlási/ármegtekintési engedély változása is új lekérést indít. Régi kontextusban indult válasz nem írja felül az új vevő kártyáit.
+
 Az alkalmazás one-route-change eseményt küld a navigáció előtt. A modul a router afterEach hookját, DOM-változásfigyelést, vissza/előre és bfcache visszatérést is kezeli.
 
 Ezek a klienskód alapján megfigyelt belső illesztések, nem verziófüggetlen, dokumentált ONe plugin-API garanciák. ONe frissítés után ellenőrizendők.
@@ -53,14 +80,22 @@ Vizsgált források:
 - https://besttool.hu/format-lemezfuro-extra-rovid-din1897-dk77-hss-3-2mm-f111139-id-111139
 - https://code.one.unity.pl/9.137.2/384c0e7.js – API-plugin, token callback, útvonal-esemény.
 - https://code.one.unity.pl/9.137.2/973ee3c.js – natív terméklekérő store actionök.
+- https://code.one.unity.pl/9.137.2/c94a199.js – pricing/stock SDK metódusok.
+- https://code.one.unity.pl/9.137.2/1abc55d.js – általános POST, környezet, tenant és token továbbítása.
+- https://code.one.unity.pl/9.137.2/80d296c.js – kosárba helyezés és kosárfrissítés store action.
+- https://docs.b2b.one/links-to-swagger – hivatalos app Swagger-szerződések.
 
-A belépett vevő tokenhozzáférése és az éles API-válaszok nem kerültek ebben a munkamenetben hitelesített felhasználóval kipróbálásra. A forrásvizsgálat a belső klienshívásokat igazolja; a tesztek ezek szerződését szimulálják. Vendég és belépett vevő külön éles/preprod integrációs ellenőrzést igényel.
+A két kért POST végpontot vendégként olvasási próbával ellenőriztem; mindkettő HTTP 200 választ adott. Hitelesített vevővel és tényleges kosármódosítással nem történt élő próba. A forrásvizsgálat a belső klienshívásokat igazolja; az automatizált tesztek ezek szerződését szimulálják. A bevezetés vendég és belépett vevő külön preprod integrációs ellenőrzését igényli.
 
 ## Ellenőrzés
 
 A csomag tesztjei Node.js és jsdom környezetben futtathatók: npm install --ignore-scripts, majd npm test. A fejlesztési csomagot és a teszteket nem kell CDN-re feltölteni; csak a release/manifest.json által megnevezett JavaScript-fájl kerül oda.
 
 Teszteld GTM Preview módban: közvetlen termékmegnyitás, legalább 7 termék, ismételt megtekintés, vissza/előre, nem termékoldalról visszatérés, későn létrejövő vagy újralétrejövő konténer, be-/kijelentkezés és vevőváltás.
+
+A vevői árat ugyanarra a mennyiségre hasonlítsd össze a natív termékoldal árával. Ellenőrizd a nettó/bruttó váltást, raktárváltást, csomagolási szorzót, minimum rendelési mennyiséget, készletkorlátos és előrendelhető terméket, a fejléc kosárszámlálójának frissülését és pluginos termék saját folyamatát is.
+
+Sikeres visszaigazoláskor a dokumentum one-recent-products-cart-added eseményt küld productId és quantity mezőkkel. A modul nem küld automatikus analitikai eseményt külső szerverre. Natív handlernél az ONe saját értesítései és mérési folyamata működnek.
 
 Állapot lekérése token vagy termékelőzmények kiírása nélkül:
 

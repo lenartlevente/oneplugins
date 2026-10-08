@@ -1,109 +1,53 @@
-# ONe – tárolási és CDN-javaslat
+# ONe – tárolás és jsDelivr-kiadás
 
-Ajánlott felállás: privát GitHub-forrás, egy első félhez tartozó munkamenetsüti, az ONe meglévő API-kliense és saját domainhez kapcsolt Cloudflare R2/CDN a kiadott JavaScripthez. A GTM egy konkrét verziót tölt be egyetlen script sorral.
+A tényleges felállás: nyilvános `lenartlevente/oneplugins` GitHub-repó, jsDelivr kódkiszolgálás, a webshop saját munkamenetsütije és az ONe natív API-/kosárkliense. A 1.1.0 kiadás vevői árat, készletet és kosárgombot ad a modulhoz.
 
-Ez az architektúrajavaslat véglegesített változata, az implementáció integrációs ellenőrzésre előkészített 1.0.0 verzió. CDN és GTM publikálás nem történt.
+## Mi hol van?
 
-## Mi hol legyen?
-
-| Tartalom | Javasolt hely | Élettartam / hozzáférés |
+| Tartalom | Hely | Élettartam |
 | --- | --- | --- |
-| Forrás, tesztek, dokumentáció | Privát `lenartlevente/CODE` repó, `ONe/recently-viewed-products/` | Git-verziókövetés, a repó jogosultságai szerint |
-| Utolsó 6 termék azonosítói | `besttool.hu` saját `__Host-one_recent_products` sütije | Böngésző-munkamenet, legfrissebb elöl |
-| Név, kép, cikkszám, terméklink | Futás közben az ONe Front Office API-kliense | Csak a modul futó állapotában és a megjelenített DOM-ban |
-| Hitelesítési token | Az ONe meglévő hitelesítési állapota | A modul a natív API-klienst használja |
-| Kiadott JavaScript | Külön R2 bucket, saját CDN-domain | Nyilvános, konkrét verzióhoz kötött fájl |
-| CMS cél-div és CDN-betöltő | ONe CMS, illetve GTM | A webshop konfigurációja |
+| Forrás, tesztek, leírások | `oneplugins/recently-viewed-products/` | Git-verziókövetés |
+| Kiadott JavaScript | `release/`, GitHubról jsDelivr-en keresztül | Konkrét verzió és tartalmi ellenőrzőösszeg |
+| Utolsó 6 termék azonosítói | `__Host-one_recent_products` első félhez tartozó süti | Böngésző-munkamenet |
+| Termékadat, vevői ár, készlet, kosárvisszajelzés | Futó modul és megjelenített DOM | Csak futás közben |
+| Token és kosár | Az ONe meglévő munkamenete és kosárkezelése | Az ONe saját működése szerint |
 
-A modul nem ír localStorage-ba, sessionStorage-ba, IndexedDB-be vagy saját szerveroldali előzménytárba. A CDN a statikus kódot szolgáltatja; a modul nem küldi oda az előzménylistát vagy a Bearer tokent. A JavaScript HTTP-gyorsítótárazása a kódfájl letöltését gyorsítja.
+A modul nem ír localStorage-ba, sessionStorage-ba, IndexedDB-be vagy saját szerveroldali előzménytárba. A termékelőzmény nem kerül a CDN-kérésbe. A tokent a natív ONe API-kliens továbbítja a megfelelő API felé.
 
-## A munkamenetsüti
+A süti legfeljebb 6 egyedi azonosítót tartalmaz, URL-kódolt JSON-ban: `{"v":1,"ids":["111139"]}`. Normál íráskor `Secure; SameSite=Lax; Path=/` attribútumokat kap, Domain, Expires és Max-Age nélkül. Azonos hoston a lapfülek közösen használják; böngésző-munkamenet-visszaállítás megőrizheti. A prod és a preprod külön hoston külön előzményt kap.
 
-- Név: `__Host-one_recent_products`.
-- Tartalom: URL-kódolt JSON, például `{"v":1,"ids":["111139","00123"]}`.
-- Legfeljebb 6 egyedi, az ONe által visszaigazolt termékazonosító. Az aktuálisan megtekintett termék is szerepel.
-- Attribútumok: `Secure; SameSite=Lax; Path=/`. Nincs `Domain`, `Expires` vagy `Max-Age` a normál írásnál.
-- A célkonténer nélkül is gyűjti a megtekintéseket; a konténer megjelenésekor kirajzolja az elérhető termékeket.
-- Azonos hoston a böngésző lapfülei közösen használják. Egy böngésző munkamenet-visszaállítása megőrizheti a sütit. Nem az ONe bejelentkezésének lejárata határozza meg az élettartamát.
-- A webshop meglévő CookieYes/GTM engedélykezeléséhez kell illeszteni. A modul alapértelmezett `canUseCookie` függvénye önmagában nem olvassa a CMP választását.
+A webshop meglévő CookieYes/GTM engedélyezéséhez kell illeszteni. A modul `canUseCookie` callbackje önmagában nem olvassa a CMP választását.
 
-A jelenlegi kéréshez böngésző-munkamenet tartozik. A kijelentkezéshez kötött törlés vagy külön üzleti inaktivitási idő új viselkedési döntés lenne.
+## Kiadás
 
-## CDN-választás
+A pontos fájlnevet, méretet és SHA-256/SRI összeget a [release/manifest.json](release/manifest.json) tartalmazza. A kiadási fájl és a `one-recent-products.v1.js` bájtról bájtra azonos. A `v1.js` név kompatibilitási belépő marad; a modul és a manifest aktuális verziója 1.1.0.
 
-| Lehetőség | Mikor választanám? | Feltétel |
-| --- | --- | --- |
-| **Cloudflare R2 + saját domain + Cloudflare cache** | Elsődleges javaslat, saját kezelésű ONe modulok közös kiadási helyének | R2-hozzáférés és a megfelelő Cloudflare-domainkonfiguráció |
-| Meglévő, saját kezelésű statikus tárhely/CDN | Ha már van megbízható feltöltési hozzáférés és megfelelő HTTPS-/cache-beállítás | Verziózott fájlútvonalak és szabályozható válaszfejlécek |
+A korábbi `one-recent-products.1.0.0.46957dcb8a91.js` a visszaállításhoz megmarad. A régi kiadási fájl tartalmát nem szabad felülírni; új kódhoz új fájlnév tartozzon.
 
-A besttool.hu jelenlegi `static.besttool.hu` hostján termékképek láthatók. Az egyedi JavaScript feltöltési jogosultságát és kiszolgálási beállításait nem ellenőriztem; használata ezek tisztázásától függ.
+A [gtm-loader.html](gtm-loader.html) a konkrét GitHub-commitból betöltött kiadási JavaScriptre mutat. Ez az éles használatra ajánlott URL. Az `@HEAD` vagy `@main` a fejlesztés során használható, de ágfrissítésnél a CDN-gyorsítótár miatt késleltetett frissülés lehetséges. A jsDelivr támogatja a commit alapú URL-t és a kiadott fájlok tartós gyorsítótárazását. [Hivatalos dokumentáció](https://github.com/jsdelivr/jsdelivr#github).
 
-Az R2 saját domainen kapcsolható a Cloudflare gyorsítótárához. A domainnek az R2 buckettel azonos Cloudflare-fiókban kell zónaként szerepelnie. A Cloudflare az `r2.dev` címet fejlesztési használatra adja, korlátozott forgalommal; éles GTM-betöltéshez saját domain a javaslat. [Hivatalos leírás](https://developers.cloudflare.com/r2/buckets/public-buckets/).
+A standalone JavaScript tartalmazza a repó MIT licencszövegét. A CDN csak a nyilvánosan kiadott kódot szolgáltatja; a modul a termék-, ár- és készletadatokhoz az ONe API-ját használja.
 
-A példák `SAJAT-CDN` jelölése helykitöltő; még nincs kiválasztott vagy létrehozott CDN-domain. Egy külön, kezelt domain aldomainje használható, akár több ONe webshop moduljainak kiszolgálására. A webshop DNS-ének módosítása nem része ennek a mentésnek.
+## GTM
 
-## Konkrét kiadási fájl
+1. A CMS-ben helyezd el a [cms-target.html](cms-target.html) cél-divet, vagy azonos ID-val a meglévő üres, kizárólag e modulnak szánt konténert.
+2. A [gtm-loader.html](gtm-loader.html) script sorát tedd Custom HTML tagbe.
+3. Trigger: DOM Ready – All Pages, a webshop sütiengedélyezésével összehangolva. Firing option: Once per page.
+4. A PWA-navigációt a modul kezeli; History Change miatti ismételt CDN-betöltés nem szükséges.
+5. Ha a webshop CSP-t használ, engedélyeznie kell a CDN-scriptet és a modul stílusának létrehozását. A modul a script nonce értékét továbbadja a stílusnak.
 
-Az előkészített kiadás:
+SRI opcionálisan a manifest `integrity` értékének és `crossorigin="anonymous"` attribútumnak a scripthez adásával használható; a CDN CORS-válaszát is ellenőrizni kell. A fájl automatikusan generált `.min.js` változatához más ellenőrzőösszeg tartozna.
 
-```text
-release/one-recent-products.1.0.0.46957dcb8a91.js
-```
+## Környezet és vevői kontextus
 
-Javasolt CDN-objektumútvonal:
+Az API-base URL-t, tenantot és aktuális tokent a meglévő ONe API-kliens kezeli. A CDN-betöltő preprod és prod környezetben ugyanaz lehet. A modul nem épít hostnévből API-címet, és nem vált vissza prodra, ha egy preprod kérés hibázik.
 
-```text
-one/recently-viewed/one-recent-products.1.0.0.46957dcb8a91.js
-```
+Be-/kijelentkezés, vevő-, raktár-, kosár-, pénznem- és nettó/bruttó váltás után a modul újrakéri az adatokat. A régi kontextusban indult válaszokat eldobja. A kosárba helyezést követően a friss készletfoglalások és árak miatt szintén újra lekérdez.
 
-A fájlnév teljes verziót és a tartalom SHA-256 ellenőrzőösszegének első 12 karakterét tartalmazza. A teljes ellenőrzőösszeg, méret és opcionális SRI-érték a [release/manifest.json](release/manifest.json) fájlban van. A kiadási JavaScript bájtról bájtra azonos a forrással; külön függőség vagy további fájlletöltés nem kell a modulhoz.
+## Bevezetés és visszaállítás
 
-Javasolt válaszfejlécek:
+GTM Preview/preprod módban először hasonlítsd össze az árakat a natív termékoldallal, azonos vevővel és mennyiséggel. Ellenőrizd a készletet, a kosárfrissítést, a minimum mennyiséget, a csomagolási egységet és a pluginos termék rendelési folyamatát. A [VALIDATION.md](VALIDATION.md) rögzíti az elvégzett teszteket és a még szükséges élő próbát.
 
-```http
-Content-Type: text/javascript; charset=utf-8
-Cache-Control: public, max-age=31536000, immutable
-```
+Visszaállítás: a GTM-scriptet az előző kipróbált commit és a 1.0.0 kiadási fájl URL-jére állítsd. Nem szükséges az előzménysüti formátumának migrációja.
 
-Egy már kiadott URL tartalmát ne írd felül. Módosított kód új verziót, új ellenőrzőösszeget és új URL-t kapjon. A GTM-ben mindig a konkrét kiadási URL szerepeljen. Visszaállításkor az előző kipróbált kiadás URL-jét kell visszatenni; a korábbi fájlokat meg kell tartani.
-
-Csak a kiadási JavaScript kerüljön a nyilvános bucketbe. A repó, tesztadatok és más céges anyagok maradjanak a forrástárban. Az R2-ben külön bucket használata egyszerűvé teszi ezt, mert a saját domain a bucket objektumait nyilvánosan elérhetővé teszi.
-
-## GTM és opcionális SRI
-
-Az alapbetöltő a [gtm-loader.html](gtm-loader.html) fájlban szerepel. A tényleges CDN-host megadása után egy script sor kerül a GTM Custom HTML tagbe; `Once per page` indítás mellett a modul kezeli a PWA-navigációt.
-
-Opcionálisan a kiadás SRI-értéke is rögzíthető:
-
-```html
-<script src="https://SAJAT-CDN/one/recently-viewed/one-recent-products.1.0.0.46957dcb8a91.js" integrity="sha384-xH27UBz6JnWf0LR7nKxAYcoHaeQ5ZI4RPGl0v3waB7fps1kmxNQve6xAPvNYbxW2" crossorigin="anonymous" data-target-id="one-recent-products-159b7d2a-5b87-4caa-a981-c6930a4a587f" async></script>
-```
-
-Az SRI-s, másik originről történő betöltéshez megfelelő CORS-válasz szükséges. Csak nyilvános kódfájlokat tartalmazó R2 buckethez javasolt dashboard CORS-konfiguráció:
-
-```json
-[
-  {
-    "AllowedOrigins": ["*"],
-    "AllowedMethods": ["GET", "HEAD"]
-  }
-]
-```
-
-Ellenőrizd a CDN-választ `Origin: https://besttool.hu` kérésfejléccel. Már gyorsítótárazott fájlnál a CORS módosítása után cache-frissítés szükséges. [Cloudflare CORS-dokumentáció](https://developers.cloudflare.com/r2/buckets/cors/).
-
-Ha a webshop CSP-t használ, annak engednie kell a CDN-scriptet és a modul stílusának létrehozását; a kód továbbadja a betöltő script nonce értékét a stílusnak. Az SRI/nonce beállításokat a tényleges GTM- és CSP-konfigurációval kell próbálni.
-
-## Kiadási menet
-
-1. Válaszd ki a kezelhető CDN-domaint és tárhelyet. R2 esetén állítsd be a külön bucketet és annak saját domainjét.
-2. Töltsd fel a konkrét kiadási JavaScriptet a fenti objektumútvonalra, a megadott fejlécekkel.
-3. Ellenőrizd a HTTP 200 választ, a tartalomtípust és a teljes SHA-256 összeget a manifesthez képest. SRI esetén a CORS-t is.
-4. A CMS-ben helyezd el a [cms-target.html](cms-target.html) konténert, vagy add meg a meglévő, kizárólag e modulnak fenntartott üres div ID-jét.
-5. A GTM-betöltőben írd át a CDN-hostot és szükség esetén a cél-div ID-jét. Illeszd a meglévő sütiengedélyezési folyamathoz.
-6. GTM Preview/preprod módban ellenőrizd a vendég és a bejelentkezett vevő működését, 7 termék és ismételt megtekintés után a sorrendet, a PWA-navigációt, a vissza/előre műveletet és a konténer újralétrejöttét.
-7. Sikeres próba után publikáld a GTM-változatot; a korábbi kiadás maradjon elérhető visszaállításhoz.
-
-Ehhez a modulhoz külön alkalmazásszerver, adatbázis vagy Worker nem szükséges. A forráskezelés, CDN-feltöltés és GTM-publikálás külön lépés. Automatikus CDN-telepítést ez a csomag nem tartalmaz.
-
-Az elvégzett teszteket és az éles ellenőrzés határát a [VALIDATION.md](VALIDATION.md) rögzíti. Az R2 díjait a választott fiók és várható használat alapján, a [mindenkori hivatalos díjszabással](https://developers.cloudflare.com/r2/pricing/) kell ellenőrizni; ez a javaslat nem tartalmaz költségígéretet.
+Saját kezelésű tárhelyhez a korábban javasolt Cloudflare R2 + saját domain továbbra is használható alternatíva. A mostani csomag a megadott jsDelivr-repóra épül; külön R2-telepítést nem tartalmaz.

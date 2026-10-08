@@ -11,6 +11,8 @@ const fixturePath = '/format-lemezfuro-extra-rovid-din1897-dk77-hss-3-2mm-f11113
 const sample = {
   id: '111139', slug: '111139', status: 'ACTIVE',
   name: 'Format lemezfúró extra rövid DIN1897 DK77 HSS 3.2mm F111139',
+  measurementUnits: { quantityMin: 1, quantityInterval: 1, packingQuantity: 1,
+    orderUnitDescription: 'db', contentUnitDescription: 'db' },
   url: fixturePath,
   photos: [{ url: 'https://static.besttool.hu/11/11/39/1/SMALL_100.webp?hash=8684e5ef8540a7d15c84449cdea5ec44' }]
 };
@@ -22,14 +24,15 @@ async function until(check, timeout = 1800) {
 }
 function product(id, overrides = {}) {
   return { id, slug: id.toLowerCase(), status: 'ACTIVE', name: 'Termék ' + id,
-    url: '/termek-id-' + id.toLowerCase(), photos: [], ...overrides };
+    url: '/termek-id-' + id.toLowerCase(), photos: [], measurementUnits: sample.measurementUnits,
+    ...overrides };
 }
 function fixture(options = {}) {
   const jar = new CookieJar();
   const dom = new JSDOM('<!doctype html><html><head></head><body>' +
     (options.noTarget ? '' : '<div id="' + targetId + '" hidden style="display:none"></div>') +
     '</body></html>', {
-    url: 'https://besttool.hu' + (options.path || fixturePath), runScripts: 'outside-only',
+    url: (options.origin || 'https://besttool.hu') + (options.path || fixturePath), runScripts: 'outside-only',
     pretendToBeVisual: true, cookieJar: jar
   });
   const w = dom.window;
@@ -37,13 +40,26 @@ function fixture(options = {}) {
   for (let i = 1; i <= 8; i++) products.set(String(i), product(String(i)));
   const subscribers = new Set(), routerHooks = new Set(), calls = [], errors = [];
   const state = { auth: { accessToken: null, sub: null, org: null },
-    account: { client: { id: null } }, config: { tenantKey: 'fetis' } };
+    account: { client: { id: null } }, config: { tenantKey: 'fetis', currency: 'HUF', accessMode: 'OPEN' },
+    layout: { currency: { code: 'HUF', iso: 'hu-HU', symbol: '' }, priceGross: false }, cart: { selectedCart: 'cart-1' },
+    plugins: { allComponents: {} },
+    stocks: { defaultWarehouse: 'CENTRAL', warehouses: { allIds: ['CENTRAL','LOCAL'], byId: {
+      CENTRAL: { id: 'CENTRAL', name: 'Központi raktár', type: 'CENTRAL' },
+      LOCAL: { id: 'LOCAL', name: 'Helyi raktár', type: 'LOCAL', parent: 'CENTRAL' }
+    } } } };
   const route = { name: (options.path && !options.path.includes('-id-')) ? 'index' : 'product-page' };
   const nuxt = {
     $route: route,
+    $config: { BASE_URL: options.apiBase || 'https://api-prod.onecommerce.shop' },
     $store: {
       state,
-      subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); }
+      _actions: { 'cart/addProductToCart': [() => {}] },
+      subscribe(fn) { subscribers.add(fn); return () => subscribers.delete(fn); },
+      async dispatch(action, payload) {
+        calls.push({ type: 'cart', action, payload: JSON.parse(JSON.stringify(payload)), token: state.auth.accessToken });
+        if (options.cart) return options.cart(action, payload, state);
+        calls.push({ type: 'cart-refresh' });
+      }
     },
     $api: { catalog: { app: {
       async getProductBySlug(slug) {
@@ -57,6 +73,25 @@ function fixture(options = {}) {
         calls.push({ type: 'list', flag, ids: [...ids], token: state.auth.accessToken });
         if (options.list) return options.list(ids, state);
         return { data: [...ids].reverse().map(id => products.get(id)).filter(Boolean) };
+      }
+    } }, pricing: { app: {
+      async fetchPricingForProducts(payload) {
+        calls.push({ type: 'price', payload: JSON.parse(JSON.stringify(payload)), token: state.auth.accessToken,
+          url: nuxt.$config.BASE_URL + '/api/v1/pricing/app/auth-optional/get-price' });
+        if (options.price) return options.price(payload, state);
+        return { data: payload.products.map(p => ({ productId: p.productId, quantity: p.quantity,
+          priceNet: 100 * p.quantity, priceGross: 127 * p.quantity, tax: 27, additionalCosts: [] })) };
+      }
+    } }, stock: { app: {
+      async post(path, payload, requestOptions) {
+        calls.push({ type: 'stock', method: 'POST', path, payload: JSON.parse(JSON.stringify(payload)),
+          options: JSON.parse(JSON.stringify(requestOptions)), token: null,
+          url: nuxt.$config.BASE_URL + '/api/v1/stock/app/public' + path });
+        if (options.stock) return options.stock(payload, state);
+        return { data: Object.fromEntries(payload.skus.map(id => [id, { stockVisibilityMode: 'VISIBLE',
+          available: true, warehouses: payload.warehouses.map(warehouseId => ({ warehouseId,
+            warehouseLabel: warehouseId === 'CENTRAL' ? 'Központi raktár' : 'Helyi raktár',
+            quantity: 12, largestQuantity: 12, available: true })) }])) };
       }
     } } },
     $router: {
@@ -200,7 +235,7 @@ test('Previous buyer response is discarded; current ONe client is reused after b
     release({ data: [{ ...sample, name: 'Régi vevő' }] });
     await pause(20);
     assert.equal(f.w.document.querySelector('.one-rv__name').textContent, 'Aktuális vevő');
-    assert.equal(f.calls.at(-1).token, 'test-only-token');
+    assert.equal(f.calls.filter(call => call.type === 'price').at(-1).token, 'test-only-token');
     assert.ok(!f.w.document.cookie.includes('token'));
     assert.ok(!JSON.stringify(f.w.OneRecentlyViewed.getState()).includes('token'));
   } finally { f.close(); }
@@ -358,5 +393,392 @@ test('An announced but cancelled route does not poll indefinitely or record its 
     await until(f.ready);
     assert.deepEqual(f.history(), ['111139']);
     assert.ok(!f.calls.some(c => c.slug === '2'));
+  } finally { f.close(); }
+});
+
+test('Prices and stock use the current ONe clients, POST bodies, canonical IDs and current cart', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.state.auth.accessToken = 'fixture-buyer-token';
+    f.w.$nuxt = f.nuxt;
+    await until(f.ready);
+    const price = f.calls.find(call => call.type === 'price');
+    assert.deepEqual(price.payload, { products: [{ productId: '111139', quantity: 1 }] });
+    assert.equal(price.token, 'fixture-buyer-token');
+    const stock = f.calls.find(call => call.type === 'stock');
+    assert.equal(stock.method, 'POST');
+    assert.equal(stock.path, '/products/stocks');
+    assert.deepEqual(stock.payload, { skus: ['111139'], warehouses: ['CENTRAL','LOCAL'], cartId: 'cart-1' });
+    assert.deepEqual(stock.options, { authentication: 'public' });
+    assert.ok(f.w.document.querySelector('.one-rv__price').textContent.includes('100'));
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /Ft.*nettó/);
+    assert.equal(f.w.document.querySelectorAll('.one-rv__stock-row').length, 2);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+    assert.deepEqual(f.history(), ['111139']);
+    assert.equal(f.jar.getCookiesSync(f.w.location.origin).length, 1);
+    assert.ok(!f.w.document.cookie.includes('price') && !f.w.document.cookie.includes('token'));
+  } finally { f.close(); }
+});
+
+test('The module uses the preprod app clients without contacting prod', async () => {
+  const f = fixture({ origin: 'https://preprod.besttool.hu', apiBase: 'https://api-preprod.login.shop' });
+  try {
+    await until(f.ready);
+    for (const call of f.calls.filter(call => call.url)) {
+      assert.ok(call.url.startsWith('https://api-preprod.login.shop/'));
+      assert.ok(!call.url.includes('api-prod.'));
+    }
+    assert.equal(f.jar.getCookiesSync('https://besttool.hu/').length, 0);
+  } finally { f.close(); }
+});
+
+test('Prices use minimum order quantity times packing; the cart receives order units', async () => {
+  const f = fixture({ path: '/termek-id-1', delayedApp: true });
+  try {
+    f.products.set('1', product('1', { measurementUnits: { quantityMin: 2, quantityInterval: 2,
+      packingQuantity: 6, orderUnitDescription: 'doboz', contentUnitDescription: 'db' } }));
+    f.w.$nuxt = f.nuxt;
+    await until(f.ready);
+    assert.equal(f.calls.find(call => call.type === 'price').payload.products[0].quantity, 12);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /1\s?200.*2 doboz/);
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.calls.some(call => call.type === 'cart-refresh'));
+    assert.deepEqual(f.calls.find(call => call.type === 'cart').payload,
+      { cartId: 'cart-1', newProduct: { productId: '1', amountOfProducts: 2 }, warehouseId: 'CENTRAL' });
+    await until(() => f.ready() && f.w.document.querySelector('.one-rv__feedback').textContent === 'Kosárba helyezve.');
+  } finally { f.close(); }
+});
+
+test('Fractional minimum quantities are preserved; invalid and overflowing units cannot be ordered', async () => {
+  const f = fixture({ path: '/', delayedApp: true });
+  try {
+    f.seed(['1','2','3']);
+    f.products.set('1', product('1', { measurementUnits: { quantityMin: 0.25, quantityInterval: 0.25,
+      packingQuantity: 2, orderUnitDescription: 'm', contentUnitDescription: 'm' } }));
+    f.products.set('2', product('2', { measurementUnits: { quantityMin: 0, quantityInterval: 1, packingQuantity: 1 } }));
+    f.products.set('3', product('3', { measurementUnits: { quantityMin: 1e308, quantityInterval: 1, packingQuantity: 1e308 } }));
+    f.w.$nuxt = f.nuxt;
+    await until(f.ready);
+    assert.deepEqual(f.calls.find(call => call.type === 'price').payload, { products: [{ productId: '1', quantity: 0.5 }] });
+    const buttons = [...f.w.document.querySelectorAll('.one-rv__cart')];
+    assert.deepEqual(buttons.map(button => button.disabled), [false,true,true]);
+  } finally { f.close(); }
+});
+
+test('Gross/net and currency switches refresh the displayed customer prices', async () => {
+  const f = fixture();
+  try {
+    await until(f.ready);
+    f.mutate(state => { state.layout.priceGross = true; });
+    await until(f.ready);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /127.*bruttó/);
+    f.mutate(state => { state.layout.currency.code = 'EUR'; });
+    await until(f.ready);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /EUR|€/);
+  } finally { f.close(); }
+});
+
+test('The old buyer price response is discarded after an auth change', async () => {
+  let release, first = true;
+  const delayed = new Promise(resolve => { release = resolve; });
+  const f = fixture({ price: body => {
+    if (first) { first = false; return delayed; }
+    return { data: body.products.map(p => ({ productId: p.productId, quantity: p.quantity, priceNet: 222, priceGross: 282 })) };
+  } });
+  try {
+    await until(() => f.calls.some(call => call.type === 'price'));
+    f.mutate(state => { state.auth.accessToken = 'buyer-B'; state.account.client.id = 'B'; });
+    await until(f.ready);
+    release({ data: [{ productId: '111139', quantity: 1, priceNet: 999, priceGross: 1269 }] });
+    await pause(25);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /222/);
+    assert.ok(!f.w.document.querySelector('.one-rv__price').textContent.includes('999'));
+  } finally { f.close(); }
+});
+
+test('Warehouse changes discard old stock responses and use the new cart/warehouse context', async () => {
+  let release, first = true;
+  const delayed = new Promise(resolve => { release = resolve; });
+  const f = fixture({ stock: body => {
+    if (first) { first = false; return delayed; }
+    return { data: { '111139': { stockVisibilityMode: 'VISIBLE', available: true,
+      warehouses: [{ warehouseId: 'LOCAL', warehouseLabel: 'Új raktár', quantity: 7 }] } } };
+  } });
+  try {
+    await until(() => f.calls.some(call => call.type === 'stock'));
+    f.mutate(state => { state.stocks.defaultWarehouse = 'LOCAL'; state.cart.selectedCart = 'cart-2'; });
+    await until(f.ready);
+    release({ data: { '111139': { stockVisibilityMode: 'VISIBLE', available: true,
+      warehouses: [{ warehouseId: 'CENTRAL', warehouseLabel: 'Régi raktár', quantity: 999 }] } } });
+    await pause(25);
+    assert.equal(f.w.document.querySelector('.one-rv__stock-row').textContent, 'Új raktár7 db');
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.calls.some(call => call.type === 'cart'));
+    assert.equal(f.calls.find(call => call.type === 'cart').payload.warehouseId, 'LOCAL');
+    assert.equal(f.calls.find(call => call.type === 'cart').payload.cartId, 'cart-2');
+  } finally { f.close(); }
+});
+
+test('A stock-hidden response exposes availability without exposing quantities', async () => {
+  const f = fixture({ stock: () => ({ data: { '111139': { stockVisibilityMode: 'HIDDEN', available: true,
+    warehouses: [{ warehouseId: 'CENTRAL', warehouseLabel: 'Titkos raktár', quantity: 987654 }] } } }) });
+  try {
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__stocks').textContent, 'Elérhető');
+    assert.equal(f.w.document.querySelectorAll('.one-rv__stock-row').length, 0);
+    assert.ok(!f.w.document.body.textContent.includes('987654'));
+  } finally { f.close(); }
+});
+
+test('Missing/null/mismatched prices are not zero prices; an explicit free price stays valid', async () => {
+  const f = fixture({ path: '/', delayedApp: true, price: () => ({ data: [
+    { productId: '1', quantity: 1, priceNet: null, priceGross: null },
+    { productId: '2', quantity: 2, priceNet: 50, priceGross: 64 },
+    { productId: '3', quantity: 1, priceNet: 0, priceGross: 0 }
+  ] }) });
+  try {
+    f.seed(['1','2','3','4']); f.w.$nuxt = f.nuxt;
+    await until(f.ready);
+    const cards = [...f.w.document.querySelectorAll('.one-rv__card')];
+    assert.deepEqual(cards.map(card => card.querySelector('.one-rv__cart').disabled), [true,true,false,true]);
+    assert.equal(cards[0].querySelector('.one-rv__price').textContent, 'Ár nem elérhető');
+    assert.match(cards[2].querySelector('.one-rv__price').textContent, /^0.*Ft/);
+  } finally { f.close(); }
+});
+
+test('A price failure keeps product navigation and stock; no price can be added to cart', async () => {
+  const f = fixture({ price: () => Promise.reject({ response: { status: 403 },
+    config: { headers: { Authorization: 'never-emit-price-token' } } }) });
+  try {
+    await until(f.ready);
+    assert.deepEqual(f.cards(), ['111139']);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    assert.equal(f.w.document.querySelectorAll('.one-rv__stock-row').length, 2);
+    assert.deepEqual(JSON.parse(JSON.stringify(f.errors)), [{ stage: 'price', code: 403 }]);
+    assert.equal(f.calls.filter(call => call.type === 'price').length, 1);
+  } finally { f.close(); }
+});
+
+test('Stock failure is unknown stock; backorderable products remain orderable', async () => {
+  const f = fixture({ stock: () => Promise.reject({ response: { status: 503 } }) });
+  try {
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__stocks').textContent, 'Készlet nem elérhető');
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+  } finally { f.close(); }
+});
+
+test('Cannot-order-above-stock products use selected plus central warehouse and content units', async () => {
+  const f = fixture({ path: '/', delayedApp: true, stock: () => ({ data: {
+    '1': { stockVisibilityMode: 'VISIBLE', available: true, warehouses: [
+      { warehouseId: 'CENTRAL', quantity: 1 }, { warehouseId: 'LOCAL', quantity: 1 }
+    ] },
+    '2': { stockVisibilityMode: 'VISIBLE', available: true, warehouses: [
+      { warehouseId: 'CENTRAL', quantity: 1 }, { warehouseId: 'LOCAL', quantity: 0 }
+    ] },
+    '3': { stockVisibilityMode: 'HIDDEN', available: false, warehouses: [] }
+  } }) });
+  try {
+    f.seed(['1','2','3','4']);
+    for (const id of ['1','2','3','4']) f.products.set(id, product(id, {
+      cannotOrderAboveStock: true, measurementUnits: { ...sample.measurementUnits, packingQuantity: 2 }
+    }));
+    f.state.stocks.defaultWarehouse = 'LOCAL';
+    f.w.$nuxt = f.nuxt;
+    await until(f.ready);
+    assert.deepEqual([...f.w.document.querySelectorAll('.one-rv__cart')].map(b => b.disabled), [false,true,true,true]);
+  } finally { f.close(); }
+});
+
+test('Price permission and guest purchasing restrictions are respected', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.nuxt.$utils = { hasPricesEnabled: false, isAnonymousAndPurchaseDisabled: true };
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    assert.equal(f.calls.filter(call => call.type === 'price').length, 0);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    f.mutate(() => { f.nuxt.$utils.hasPricesEnabled = true; f.nuxt.$utils.isAnonymousAndPurchaseDisabled = false; });
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+  } finally { f.close(); }
+});
+
+test('A native product cart handler is preferred and plugin flows are not bypassed', async () => {
+  const f = fixture({ delayedApp: true });
+  const nativeCalls = [];
+  try {
+    f.products.set('111139', { ...sample, pluginsData: { special: { value: true } } });
+    f.state.plugins.allComponents.special = { pluginId: 'special', raw: { type: 'app_add_to_cart' } };
+    f.nuxt.$children = [{ $children: [{
+      defaultAddToCartFlow() {}, runValidators() {}, getOrFetchProduct() {},
+      async addToCart(id, quantity, source) { nativeCalls.push({ id, quantity, source }); return sample; }
+    }] }];
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => nativeCalls.length === 1);
+    assert.deepEqual(nativeCalls, [{ id: '111139', quantity: 1, source: 'recently-viewed' }]);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
+  } finally { f.close(); }
+});
+
+test('Plugin products and missing registered cart actions fail closed without a native handler', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.products.set('111139', { ...sample, pluginsData: { special: {} } });
+    f.state.plugins.allComponents.special = { pluginId: 'special', raw: { type: 'app_add_to_cart' } };
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    f.products.set('111139', sample);
+    f.nuxt.$store._actions = {};
+    f.w.OneRecentlyViewed.refresh(); await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
+  } finally { f.close(); }
+});
+
+test('Informational product metadata permits the registered native cart action', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.products.set('111139', { ...sample, pluginsData: { productHelper: { value: true } } });
+    f.state.plugins.allComponents.helper = { pluginId: 'productHelper', raw: { type: 'iframe_front' } };
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.calls.some(call => call.type === 'cart-refresh'));
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 1);
+  } finally { f.close(); }
+});
+
+test('An unknown plugin registry fails closed and later registry changes refresh cart eligibility', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.products.set('111139', { ...sample, pluginsData: { special: {} } });
+    delete f.state.plugins;
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    f.mutate(state => { state.plugins = { allComponents: {} }; });
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+    f.mutate(state => { state.plugins.allComponents.special = { pluginId: 'special', raw: { type: 'app_add_to_cart' } }; });
+    await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
+  } finally { f.close(); }
+});
+
+test('Double clicks cannot add the same product twice while a write is pending; clicks do not navigate', async () => {
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ cart: () => pending });
+  try {
+    await until(f.ready);
+    const button = f.w.document.querySelector('.one-rv__cart');
+    button.click(); button.click();
+    await until(() => f.calls.some(call => call.type === 'cart'));
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 1);
+    assert.equal(button.disabled, true);
+    assert.equal(button.closest('a'), null);
+    assert.equal(f.w.location.pathname, fixturePath);
+    release(); await until(() => f.ready() && f.w.document.querySelector('.one-rv__feedback').textContent === 'Kosárba helyezve.');
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+  } finally { f.close(); }
+});
+
+test('A rejected cart write is not retried and its error contains no request credentials', async () => {
+  const f = fixture({ cart: () => Promise.reject({ response: { status: 409 },
+    config: { headers: { Authorization: 'never-emit-cart-token' } } }) });
+  try {
+    await until(f.ready); f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.errors.some(error => error.stage === 'cart'));
+    await pause(30);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 1);
+    assert.deepEqual(JSON.parse(JSON.stringify(f.errors)), [{ stage: 'cart', code: 409 }]);
+    assert.match(f.w.document.querySelector('.one-rv__feedback').textContent, /Ellenőrizd a kosarat/);
+  } finally { f.close(); }
+});
+
+test('A late cart write result for an old buyer cannot show success or send a cart-added event', async () => {
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ cart: () => pending });
+  let events = 0;
+  try {
+    f.w.document.addEventListener('one-recent-products-cart-added', () => events++);
+    await until(f.ready); f.w.document.querySelector('.one-rv__cart').click();
+    f.mutate(state => { state.auth.accessToken = 'new-buyer'; state.account.client.id = 'new-buyer'; });
+    await until(f.ready);
+    release(); await pause(20);
+    assert.equal(events, 0);
+    assert.ok(!f.w.document.body.textContent.includes('Kosárba helyezve.'));
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, false);
+  } finally { f.close(); }
+});
+
+test('Image/name navigation stays in the native router, separate from the cart button', async () => {
+  const f = fixture();
+  try {
+    await until(f.ready);
+    const card = f.w.document.querySelector('.one-rv__card');
+    assert.equal(card.querySelector('img').closest('a').getAttribute('href'), fixturePath);
+    assert.equal(card.querySelector('h3').closest('a').getAttribute('href'), fixturePath);
+    assert.equal(card.querySelector('button').closest('a'), null);
+    assert.ok(!card.textContent.includes('Megnézem'));
+    const event = new f.w.MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    assert.equal(card.querySelector('h3').dispatchEvent(event), false);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
+  } finally { f.close(); }
+});
+
+test('Additional costs are disclosed without turning them into the displayed product price', async () => {
+  const f = fixture({ price: () => ({ data: [{ productId: '111139', quantity: 1, priceNet: 100, priceGross: 127,
+    additionalCosts: [{ alreadyIncludedInPrice: false, priceNet: 5, priceGross: 6.35 }] }] }) });
+  try {
+    await until(f.ready);
+    assert.match(f.w.document.querySelector('.one-rv__price').textContent, /100/);
+    assert.ok(f.w.document.body.textContent.includes('További költségek a kosárban.'));
+  } finally { f.close(); }
+});
+
+test('A late native cart component enables plugin products and clears the previous disabled reason', async () => {
+  const f = fixture({ delayedApp: true });
+  try {
+    f.products.set('111139', { ...sample, pluginsData: { special: {} } });
+    f.state.plugins.allComponents.special = { pluginId: 'special', raw: { type: 'app_add_to_cart' } };
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    f.nuxt.$children = [{ defaultAddToCartFlow() {}, runValidators() {}, getOrFetchProduct() {},
+      async addToCart() { return null; } }];
+    f.w.document.body.appendChild(f.w.document.createElement('aside'));
+    await until(() => !f.w.document.querySelector('.one-rv__cart').disabled);
+    assert.equal(f.w.document.querySelector('.one-rv__feedback').textContent, '');
+  } finally { f.close(); }
+});
+
+test('The read-request timeout cannot unlock a pending write or falsely confirm it', async () => {
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ config: { requestTimeoutMs: 15 }, cart: () => pending });
+  try {
+    await until(f.ready); f.w.document.querySelector('.one-rv__cart').click();
+    await pause(35);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 1);
+    assert.equal(f.errors.filter(error => error.stage === 'cart').length, 0);
+    release(); await until(() => f.ready() && !f.w.document.querySelector('.one-rv__cart').disabled);
+  } finally { f.close(); }
+});
+
+test('An opened or rejected native plugin flow is not reported as a successful cart write', async () => {
+  const f = fixture({ delayedApp: true });
+  let events = 0;
+  try {
+    f.nuxt.$children = [{ defaultAddToCartFlow() {}, runValidators() {}, getOrFetchProduct() {},
+      async addToCart() { return null; } }];
+    f.w.document.addEventListener('one-recent-products-cart-added', () => events++);
+    f.w.$nuxt = f.nuxt; await until(f.ready);
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.w.document.querySelector('.one-rv__feedback').textContent === 'Kövesd a webshop kosárüzenetét.');
+    assert.equal(events, 0);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 0);
   } finally { f.close(); }
 });

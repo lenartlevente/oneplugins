@@ -1,20 +1,17 @@
 {
   "version": "1.2.0",
-  "source": "one-recent-products.v1.js",
   "file": "one-recent-products.1.2.0.7f4d72d3e7f1.js",
   "bytes": 36403,
   "sha256": "7f4d72d3e7f14738f06ae2a57cdcc5e363b98a3726963d434135a4863a830a03",
   "integrity": "sha384-PEhA5Sryv+LAGs0iv9YgQXe7+Hw3v6my4Nyi2eiS0Juc+hsIq0Cwoqib9k7L3Fdl",
   "contentType": "text/javascript; charset=utf-8",
-  "previousFile": "one-recent-products.1.1.0.72dbc7faad84.js",
-  "integrationStatus": "central-css-and-authenticated-preprod-verification-required",
-  "styling": "central-css",
+  "integrationStatus": "published-authenticated-preprod-verification-not-recorded",
+  "styling": "external-stylesheet",
   "stylesheet": {
-    "source": "one-recent-products.css",
     "file": "one-recent-products.1.2.0.022c59d2ea8b.css",
-    "bytes": 7043,
-    "sha256": "022c59d2ea8b60b8dec6e50fdbb4888391d5c79896c7d51abb37bcd6015f7b59",
-    "integrity": "sha384-EnYtwFIJctC0qHF8QsDwMHgBsLVX6L40Q9UkYHMzaA3kb38pkfbYfkUkOVghQq8j",
+    "bytes": 7042,
+    "sha256": "3022c30d55c17ada1968e4abd35843c57d587fffd1567d29227cdf02d04f0f2a",
+    "integrity": "sha384-BW4Je6fh/RcMMLs/ei5rAZsYjCNruebKVALR/W70FsxTYNiOroLubFQQGhkwlDuq",
     "contentType": "text/css; charset=utf-8"
   }
 }

@@ -5,9 +5,7 @@ Az ellenőrzött oldal az ONe 9.137.2 kliensét használta 2026. október 8-án.
 Integrációs ellenőrzésre előkészített kiadás; GTM-publikálás és hitelesített vevői kosárpróba nem történt.
 
 A forrás helye: [lenartlevente/oneplugins – recently-viewed-products](https://github.com/lenartlevente/oneplugins/tree/main/recently-viewed-products).
-A végleges tárolási és CDN-architektúrajavaslat: [STORAGE-CDN.md](STORAGE-CDN.md).
-CSS-beillesztés, natív osztályok és raktár/állapot szelektorok: [STYLING.md](STYLING.md).
-A `release/` mappában a változatlan futó kód verziózott kiadási fájlja és az ellenőrzőösszegeket tartalmazó manifest található.
+
 
 ## Működés
 

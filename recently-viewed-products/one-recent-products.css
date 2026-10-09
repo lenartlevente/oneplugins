@@ -173,7 +173,7 @@ SOFTWARE.
   margin: 0 0 3px;
   color: var(--one-rv-accent);
   font-family: inherit;
-  font-size: clamp(1.05rem, 1.75vw, 1.7rem);
+  font-size: clamp(1.05rem, 1.55vw, 1.7rem);
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: normal;

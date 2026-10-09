@@ -19,6 +19,10 @@ const sample = {
   photos: [{ url: 'https://static.besttool.hu/11/11/39/1/SMALL_100.webp?hash=8684e5ef8540a7d15c84449cdea5ec44' }]
 };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+function visibility(f, hidden) {
+  Object.defineProperty(f.w.document, 'hidden', { configurable: true, value: hidden });
+  f.w.document.dispatchEvent(new f.w.Event('visibilitychange'));
+}
 async function until(check, timeout = 1800) {
   const end = Date.now() + timeout;
   while (Date.now() < end) { if (check()) return; await pause(5); }
@@ -868,5 +872,106 @@ test('The module leaves styling to central CSS and removes its legacy injected s
     f.w.document.head.appendChild(style);
     f.w.eval(source); await until(f.ready);
     assert.equal(f.w.document.querySelectorAll('style, link[rel="stylesheet"]').length, 0);
+  } finally { f.close(); }
+});
+
+test('Tab return refreshes prices in place, without hiding cards or starting duplicate reads', async () => {
+  let release, priceCalls = 0;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ price: () => ++priceCalls === 1 ? { data: [{
+    productId: '111139', quantity: 1, priceNet: 100, priceGross: 127
+  }] } : pending });
+  try {
+    await until(f.ready);
+    const section = f.w.document.querySelector('.one-rv');
+    const container = f.w.document.getElementById(targetId);
+    visibility(f, true);
+    assert.equal(container.hidden, false);
+    visibility(f, false);
+    assert.equal(container.hidden, false);
+    await until(() => priceCalls === 2);
+    assert.equal(f.w.document.querySelector('.one-rv'), section);
+    assert.match(section.querySelector('.one-rv__price-value').textContent, /100.*Ft/);
+    visibility(f, true); visibility(f, false);
+    await pause(25);
+    assert.equal(priceCalls, 2);
+    assert.equal(container.hidden, false);
+    release({ data: [{ productId: '111139', quantity: 1, priceNet: 120, priceGross: 152.4 }] });
+    await until(f.ready);
+    assert.equal(container.hidden, false);
+    assert.match(f.w.document.querySelector('.one-rv__price-value').textContent, /120.*Ft/);
+  } finally { f.close(); }
+});
+
+test('A buyer change on tab return hides the previous cards and rejects a delayed background price', async () => {
+  let release, priceCalls = 0;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ price: () => {
+    priceCalls++;
+    return priceCalls === 2 ? pending : { data: [{ productId: '111139', quantity: 1,
+      priceNet: priceCalls === 1 ? 100 : 300, priceGross: priceCalls === 1 ? 127 : 381 }] };
+  } });
+  try {
+    await until(f.ready);
+    visibility(f, false);
+    await until(() => priceCalls === 2);
+    visibility(f, true);
+    // A change outside the store subscriber must still be detected on resume.
+    f.state.auth.accessToken = 'new-buyer-token'; f.state.account.client.id = 'new-buyer';
+    visibility(f, false);
+    assert.equal(f.w.document.getElementById(targetId).hidden, true);
+    await until(f.ready);
+    assert.equal(f.calls.filter(call => call.type === 'price').at(-1).token, 'new-buyer-token');
+    release({ data: [{ productId: '111139', quantity: 1, priceNet: 150, priceGross: 190.5 }] });
+    await pause(25);
+    assert.match(f.w.document.querySelector('.one-rv__price-value').textContent, /300.*Ft/);
+    assert.equal(f.w.document.getElementById(targetId).hidden, false);
+  } finally { f.close(); }
+});
+
+test('Tab return detects a missed route event and refreshes the current product', async () => {
+  const f = fixture();
+  try {
+    await until(f.ready);
+    visibility(f, true);
+    f.w.history.replaceState({}, '', '/termek-id-2');
+    visibility(f, false);
+    assert.equal(f.w.document.getElementById(targetId).hidden, true);
+    await until(() => f.ready() && f.cards()[0] === '2');
+    assert.deepEqual(f.history(), ['2', '111139']);
+  } finally { f.close(); }
+});
+
+test('Consent revoked while hidden is enforced immediately on tab return', async () => {
+  let allowed = true;
+  const f = fixture({ config: { canUseCookie: () => allowed } });
+  try {
+    await until(f.ready);
+    const callCount = f.calls.length;
+    visibility(f, true); allowed = false; visibility(f, false);
+    assert.equal(f.w.document.getElementById(targetId).hidden, true);
+    await until(() => f.w.OneRecentlyViewed.getState().status === 'disabled');
+    assert.equal(f.calls.length, callCount);
+  } finally { f.close(); }
+});
+
+test('Tab return does not refresh or cancel a pending cart write', async () => {
+  let release;
+  const pending = new Promise(resolve => { release = resolve; });
+  const f = fixture({ cart: () => pending });
+  try {
+    await until(f.ready);
+    f.w.document.querySelector('.one-rv__cart').click();
+    await until(() => f.calls.some(call => call.type === 'cart'));
+    const callCount = f.calls.length;
+    visibility(f, true); visibility(f, false);
+    await pause(25);
+    assert.equal(f.calls.length, callCount);
+    assert.equal(f.w.document.getElementById(targetId).hidden, false);
+    assert.equal(f.w.document.querySelector('.one-rv__cart').disabled, true);
+    release();
+    await until(() => f.ready() && !f.w.document.querySelector('.one-rv__cart').disabled);
+    assert.match(f.w.document.querySelector('.one-rv__feedback[role="status"]').textContent, /Kosárba helyezve/);
+    assert.equal(f.calls.filter(call => call.type === 'cart').length, 1);
   } finally { f.close(); }
 });

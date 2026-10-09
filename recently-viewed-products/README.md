@@ -1,8 +1,8 @@
 # ONe – utolsó 6 megtekintett termék
 
-1.2.1 kliensmodul a besttool.hu ONe Front Office felületéhez, vevői árral, készlettel, kosárgombbal és külön CDN-es CSS-fájlból kezelt megjelenéssel.
+1.2.2 kliensmodul a besttool.hu ONe Front Office felületéhez, vevői árral, készlettel, kosárgombbal és külön CDN-es CSS-fájlból kezelt megjelenéssel.
 Az ellenőrzött oldal az ONe 9.137.2 kliensét használta 2026. október 8-án.
-A tulajdonos visszajelzése szerint az 1.2.0 JS + CSS beillesztési minta már megjelent az oldalon. Az 1.2.1 elrendezéshez a `gtm-loader.html` teljes tartalmára kell cserélni a korábbi beillesztést. Hitelesített vevői kosárpróba eredménye nincs rögzítve ebben a repóban.
+A tulajdonos visszajelzése szerint az 1.2.0 és 1.2.1 JS + CSS beillesztési minta már megjelent az oldalon. Az 1.2.2 javításaihoz a `gtm-loader.html` teljes tartalmára kell cserélni a korábbi beillesztést. Hitelesített vevői kosárpróba eredménye nincs rögzítve ebben a repóban.
 
 A forrás helye: [lenartlevente/oneplugins – recently-viewed-products](https://github.com/lenartlevente/oneplugins/tree/main/recently-viewed-products).
 
@@ -34,7 +34,7 @@ A forrás helye: [lenartlevente/oneplugins – recently-viewed-products](https:/
 
 ## Telepítés
 
-1. A `gtm-loader.html` teljes tartalmát, a `script` és a `link` elemet együtt illeszd be az oldal HTML-blokkjába vagy a GTM Custom HTML tagjébe, a régi beillesztés helyére. Az 1.2.1 új JS- és CSS-fájlt használ. A JavaScript nem tölti be automatikusan a CSS-t; azt a `link` elem kéri le. A besttool.hu meglévő fetis-stockbox és árstílusai is szükségesek.
+1. A `gtm-loader.html` teljes tartalmát, a `script` és a `link` elemet együtt illeszd be az oldal HTML-blokkjába vagy a GTM Custom HTML tagjébe, a régi beillesztés helyére. Az 1.2.2 új JS- és CSS-fájlt használ. A JavaScript nem tölti be automatikusan a CSS-t; azt a `link` elem kéri le. A besttool.hu meglévő fetis-stockbox és árstílusai is szükségesek.
 2. A `release/manifest.json` nevezi meg az aktív JS- és CSS-fájlt. Mindkettő a GitHub-repóból, jsDelivr-en keresztül töltődik be. A jelenlegi minta `@HEAD` hivatkozást használ, így a repó alapértelmezett ágát követi.
 3. A `cms-target.html` tartalmát helyezd el a termékoldal kívánt CMS HTML-blokkjában, ha a célkonténer még nincs ott.
 4. Ha meglévő üres UUID-s divet használsz, annak ID-jét add meg a betöltő `data-target-id` attribútumában. A cél-div kizárólag e modulhoz tartozzon. Más célra használt rejtett ONe-elemet ne adj meg.
@@ -125,11 +125,11 @@ A munkamenetsüti böngésző-visszaállításkor megmaradhat, és azonos hoston
 
 ## Karbantartás és archívum
 
-A `release/` könyvtárban az aktív JS, CSS és manifest, valamint a még használt 1.2.0 beillesztés fájljai maradnak. Az 1.0.0 és 1.1.0 kiadások és a külön forrásmásolatok helyi, repón kívüli archívumba kerültek; lásd a [repó leírását](../README.md#fájlok-és-archiválás).
+A `release/` könyvtárban az aktív JS, CSS és manifest, valamint a korábbi 1.2.0 és 1.2.1 beillesztések változatlan fájljai maradnak. Az 1.0.0 és 1.1.0 kiadások és a külön forrásmásolatok helyi, repón kívüli archívumba kerültek; lásd a [repó leírását](../README.md#fájlok-és-archiválás).
 
 Új fejlesztéshez az aktív kiadásból készíts munkapéldányt a repón kívül. Új kiadáskor új verzióval és a végleges, LF sortöréses fájl SHA-256 hashének első 12 karakterével képzett fájlnévvel helyezd el a JS-t és CSS-t a `release/` könyvtárban. Frissítsd a manifestet és a betöltési mintát, majd futtasd a teszteket. Már közzétett, hash-t tartalmazó fájl tartalmát ne írd felül: az oldalon használt URL a meglévő kiadást azonosítja.
 
-Az 1.2.0 CSS-fájlnév történelmi azonosító: a korábbi módosítások után már nem egyezik a tartalom hashének elejével. Az 1.2.1 fájlnevek és a manifest a végleges, LF sortöréses tartalom alapján készültek.
+Az 1.2.0 CSS-fájlnév történelmi azonosító: a korábbi módosítások után már nem egyezik a tartalom hashének elejével. Az 1.2.1 és újabb fájlnevek, valamint az aktuális manifest a végleges, LF sortöréses tartalom alapján készültek.
 
 ## 1.2.1 elrendezés
 
@@ -141,3 +141,13 @@ Az 1.2.0 CSS-fájlnév történelmi azonosító: a korábbi módosítások után
 - Subgrid nélküli böngészőben a tartalék flex elrendezés az ár–raktár–gomb csoportot a kártya aljára rendezi.
 
 A kiadást a webshop aktuális CSS-eivel, Chrome-ban 1440, 1199, 769, 768, 585, 584 és 375 px szélességen ellenőriztük, különböző hosszúságú nevekkel, hiányzó árral és további költség üzenettel.
+
+## 1.2.2 javítások
+
+585 px alatt a kedvezményjelvény 12 px-re követi az áthúzott árat, nem kerül a teljes kártya jobb szélére. A raktár neve és a mennyiség ugyanabban a háromoszlopos sorban marad; a korábbi mobilos szabály, amely külön sorba tette a mennyiséget, megszűnt. Az árblokk belső HTML-je és a nagyobb képernyők elrendezése változatlan.
+
+Korábban a böngészőfülre visszatérés `visibilitychange` eseménye feltétel nélkül érvénytelenítette és elrejtette az ajánlót, majd új adatokat kért. Az 1.2.2 azonos útvonal és vevői kontextus esetén láthatóan hagyja a meglévő kártyákat, miközben a háttérben frissíti a termékeket, árakat és készletet. Ismételt fülváltás nem indít párhuzamos olvasásokat; folyamatban lévő kosárműveletet a fülváltás nem szakít meg.
+
+Útvonal-, vevő-, jogosultság- vagy hozzájárulás-változás esetén a korábbi érvénytelenítés és a régi válaszok elutasítása továbbra is működik. Az ajánló a célkonténerben jelenik meg: SPA-navigációkor a webshop eltávolíthatja vagy újra létrehozhatja ezt a konténert, amelyet a modul figyel és újra feltölt. Másik weboldalra történő teljes navigációkor az eredeti dokumentum megszűnik, ezért az ajánló nem maradhat ott globális elemként.
+
+Ellenőrzés: 54 működési teszt, köztük a fülváltáskori háttérfrissítés, régi vevői válasz elutasítása, kimaradt navigációs esemény, hozzájárulás-visszavonás és folyamatban lévő kosárművelet esetei. A böngészős méretellenőrzés a korábbi hét szélességen, mobilon az engedmény távolságát és az egy sorban maradó készletmennyiséget is vizsgálja.

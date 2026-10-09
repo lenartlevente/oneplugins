@@ -4,13 +4,13 @@ ONe webshopmodulok. Licenc: [MIT](LICENSE).
 
 ## Legutóbb megtekintett termékek
 
-Az oldalon közzétett 1.2.0 modul fájljai a [`recently-viewed-products/release/`](recently-viewed-products/release/) könyvtárban vannak. A telepítés és a működés leírása a [modul dokumentációjában](recently-viewed-products/README.md) található; a közzétett JS + CSS beillesztési minta a [`gtm-loader.html`](recently-viewed-products/gtm-loader.html).
+Az aktuális 1.2.1 modul fájljai a [`recently-viewed-products/release/`](recently-viewed-products/release/) könyvtárban vannak. A telepítés és a működés leírása a [modul dokumentációjában](recently-viewed-products/README.md) található; a JS + CSS beillesztési minta a [`gtm-loader.html`](recently-viewed-products/gtm-loader.html). A korábban az oldalon használt 1.2.0 fájlok is megmaradnak, hogy a régi beillesztés tovább működjön; az új megjelenéshez a teljes beillesztési mintát frissíteni kell.
 
 CDN: https://cdn.jsdelivr.net/gh/lenartlevente/oneplugins@HEAD/
 
 ## Fájlok és archiválás
 
-- `release/`: az aktív JavaScript, CSS és az ezeket leíró `manifest.json`. Ezek a modul egyetlen karbantartott kódpéldányai.
+- `release/`: az aktív JavaScript, CSS és az ezeket leíró `manifest.json`, valamint a még használt korábbi beillesztéshez szükséges 1.2.0 fájlok. Nincsenek külön forrásmásolatok.
 - `tests/`, `package.json`: a kiadott JavaScript ellenőrzéséhez szükséges fejlesztési fájlok.
 - `gtm-loader.html`, `cms-target.html`: beillesztési minták.
 - `README.md`, `LICENSE`: dokumentáció és licenc.
